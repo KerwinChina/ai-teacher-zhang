@@ -3,3 +3,7 @@ numpy
 pandas
 pydeck
 streamlit
+supabase
+langchain
+tiktoken
+langchain_openai
