@@ -74,7 +74,7 @@ def queryKnowedge(query):
         info_source.append(result2.data[0]['metadata']['info_source'])
 
     for item in result2.data:
-        request_content.append(item['content'])
+        request_content.append(item['metadata']['school_name']+"; "+item['content'])
 
     # request_content = list(set(request_content))
 
