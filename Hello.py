@@ -13,9 +13,10 @@ from langchain_community.callbacks import get_openai_callback
 
 with st.sidebar:
     custom_openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
-    supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
-    supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
-
+    # supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
+    # supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
+    supabase_url = st.secrets["supabase_url"]
+    supabase_key = st.secrets["supabase_key"]
 
 if custom_openai_api_key:
     chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name="gpt-4-0125-preview")
