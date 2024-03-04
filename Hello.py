@@ -1,4 +1,5 @@
 import ast
+import spacy
 from openai import OpenAI
 import streamlit as st
 from supabase import create_client, Client
@@ -8,19 +9,28 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import get_openai_callback
+from zhipuai import ZhipuAI
 
 
 
 with st.sidebar:
+    selected_option = st.selectbox('请选择一个选项', ['zhipuai', 'openai'])
+    if selected_option == 'zhipuai':
+        model_selected_option = st.selectbox('请选择一个选项', ['glm-4', 'glm-3-turbo'])
+    else:
+        model_selected_option = st.selectbox('请选择一个选项', ['gpt-4-0125-preview', 'gpt-3.5-turbo-0125'])
     custom_openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
-    # supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
-    # supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
-    supabase_url = st.secrets["supabase_url"]
-    supabase_key = st.secrets["supabase_key"]
+    supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
+    supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
+    # supabase_url = st.secrets["supabase_url"]
+    # supabase_key = st.secrets["supabase_key"]
 
 if custom_openai_api_key:
-    chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name="gpt-4-0125-preview")
-    embedding1536 = OpenAIEmbeddings(openai_api_key=custom_openai_api_key
+    if selected_option=='zhipuai':
+        client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
+    else:
+        chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
+    embedding1536 = OpenAIEmbeddings(openai_api_key='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'
                                  ,
                                  model="text-embedding-3-large", dimensions=1536)
 
@@ -30,22 +40,6 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
-def get_school_name_and_year(question):
-
-    content = f"'''{question}'''"
-    # content += f'\n问题：按照如下的格式给出：{{"school_name":"大学名称","year":"年份"}}，不要输出其它结果'
-    messages = [
-        SystemMessage(
-            content="找出文档内容中的大学名称和年份，我会将文档内容以三引号(''')引起来发送给你，按照如下的格式给出：{'school_name':'大学名称','year':'年份'}"
-                    "，如果没有年份，就不要输出year字段，"
-                    "如果没有大学名称，就不要输出school_name字段，如果年份和大学名称都没有，就直接返回{}，不要输出其它无关的内容"
-        ),
-        HumanMessage(
-            content=content
-
-        ),
-    ]
-    return chat(messages).content
 
 st.title("💬 Chatbot")
 st.caption("🚀 A streamlit chatbot powered by OpenAI LLM")
@@ -55,15 +49,40 @@ if "messages" not in st.session_state:
 if supabase_url and supabase_key:
     supabase: Client = create_client(supabase_url,supabase_key)
 
+def get_school_name(question):
+    nlp = spacy.load("zh_core_web_md")
+    # Process the sentence with spaCy
+    doc = nlp(question)
+
+    # Extract organization entities
+    school_name = ''
+    year = None
+    for ent in doc.ents:
+        if ent.label_ == "ORG":
+           school_name = ent.text
+        if ent.label_ == "DATE":
+            year = ent.text
+            year = year.replace('年','')
+    if not year:
+        return "{'school_name':'"+school_name+"'}"
+    else:
+        return "{'school_name':'"+school_name+"','year':'"+year+"'}"
 
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
+st.chat_message("assistant").write(get_school_name("北京大学的招生专业目录有哪些？"))
+
 def queryKnowedge(query):
     request_content = []
     info_source = []
-    filter_condition = get_school_name_and_year(query)
+    filter_condition = get_school_name(query)
+    # if selected_option == 'zhipuai':
+    #     filter_condition = get_school_name_and_year_by_zhipu(query)
+    # else:
+    #     filter_condition = get_school_name_and_year_by_openai(query)
+
     # 查询知识库
     result2 = supabase.rpc('match_documents_v3', {
             "query_embedding": embedding1536.embed_query(query),
@@ -110,21 +129,33 @@ if prompt := st.chat_input():
         st.stop()
     content = queryKnowedge(prompt)
 
+    if selected_option == 'zhipuai':
+        message_list = [
+            {"role": "system", "content": "我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"},
+            {"role": "user", "content": content},
+        ]
+    else:
+        message_list = [
+            SystemMessage(
+                content="我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"
+            ),
+            HumanMessage(
+                content=content
 
-    message_list = [
-        SystemMessage(
-            content="我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"
-        ),
-        HumanMessage(
-            content=content
-
-        ),
-    ]
+            ),
+        ]
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
 
     with get_openai_callback() as cb:
-        msg = chat(message_list).content
+        if selected_option == 'zhipuai':
+            response = client.chat.completions.create(
+                model=model_selected_option,  
+                messages=message_list,
+            )
+            msg = response.choices[0].message.content
+        else:
+            msg = chat(message_list).content
         st.session_state.messages.append({"role": "assistant", "content": msg})
         st.chat_message("assistant").write(msg)
         print(cb)

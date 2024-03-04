@@ -7,3 +7,6 @@ supabase
 langchain
 tiktoken
 langchain_openai
+zhipuai
+spacy
+en_core_web_sm
