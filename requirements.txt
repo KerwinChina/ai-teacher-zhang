@@ -9,4 +9,4 @@ tiktoken
 langchain_openai
 zhipuai
 spacy
-python -m spacy download zh_core_web_md
+spacy download zh_core_web_md
