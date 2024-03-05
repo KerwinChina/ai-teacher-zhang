@@ -72,7 +72,6 @@ def get_school_name(question):
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-st.chat_message("assistant").write(get_school_name("北京大学的招生专业目录有哪些？"))
 
 def queryKnowedge(query):
     request_content = []
