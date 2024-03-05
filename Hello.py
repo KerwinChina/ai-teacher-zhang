@@ -19,18 +19,19 @@ with st.sidebar:
         model_selected_option = st.selectbox('请选择一个选项', ['glm-4', 'glm-3-turbo'])
     else:
         model_selected_option = st.selectbox('请选择一个选项', ['gpt-4-0125-preview', 'gpt-3.5-turbo-0125'])
-    custom_openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
-    supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
-    supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
-    # supabase_url = st.secrets["supabase_url"]
-    # supabase_key = st.secrets["supabase_key"]
+    custom_openai_api_key = st.text_input("API Key", key="chatbot_api_key", type="password")
+    # supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
+    # supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
+    supabase_url = st.secrets["supabase_url"]
+    supabase_key = st.secrets["supabase_key"]
+    open_ai_key = st.secrets["open_ai_key"]
 
 if custom_openai_api_key:
     if selected_option=='zhipuai':
         client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
     else:
         chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
-    embedding1536 = OpenAIEmbeddings(openai_api_key='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'
+    embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key
                                  ,
                                  model="text-embedding-3-large", dimensions=1536)
 
@@ -41,8 +42,8 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     return num_tokens
 
 
-st.title("💬 Chatbot")
-st.caption("🚀 A streamlit chatbot powered by OpenAI LLM")
+st.title("💬 AI版张老师")
+st.caption("🚀 A streamlit chatbot powered by LLM")
 if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
