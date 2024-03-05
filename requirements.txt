@@ -9,4 +9,4 @@ tiktoken
 langchain_openai
 zhipuai
 spacy
-git+https://github.com/explosion/spacy-models/releases/tag/zh_core_web_md-3.7.0
+git+https://github.com/explosion/spacy-models.git@master#egg=spacy-models
