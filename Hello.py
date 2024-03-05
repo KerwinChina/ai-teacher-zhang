@@ -14,26 +14,30 @@ from zhipuai import ZhipuAI
 
 
 with st.sidebar:
-    selected_option = st.selectbox('请选择一个选项', ['zhipuai', 'openai'])
+    selected_option = st.selectbox('请选择一个公司', ['zhipuai', 'openai'])
     if selected_option == 'zhipuai':
-        model_selected_option = st.selectbox('请选择一个选项', ['glm-4', 'glm-3-turbo'])
+        model_selected_option = st.selectbox('请选择一个模型', ['glm-4', 'glm-3-turbo'])
+        custom_openai_api_key = st.secrets["zhipu_ai_key"]
     else:
-        model_selected_option = st.selectbox('请选择一个选项', ['gpt-4-0125-preview', 'gpt-3.5-turbo-0125'])
-    custom_openai_api_key = st.text_input("API Key", key="chatbot_api_key", type="password")
+        model_selected_option = st.selectbox('请选择一个模型', ['gpt-4-0125-preview', 'gpt-3.5-turbo-0125'])
+        custom_openai_api_key = st.text_input("API Key", key="chatbot_api_key", type="password")
     # supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
     # supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
     supabase_url = st.secrets["supabase_url"]
     supabase_key = st.secrets["supabase_key"]
     open_ai_key = st.secrets["open_ai_key"]
+    # supabase_url = 'https://dusjejrppguxkatsyzkp.supabase.co'
+    # supabase_key= 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1c2planJwcGd1eGthdHN5emtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDQzNTg1NTYsImV4cCI6MjAxOTkzNDU1Nn0.4ymDATwpY7ousL_rT9SrpHqMT631fo5XYzeu8wsb28s'
+    # open_ai_key = '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'
 
-if custom_openai_api_key:
-    if selected_option=='zhipuai':
-        client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
-    else:
-        chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
-    embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key
-                                 ,
-                                 model="text-embedding-3-large", dimensions=1536)
+# if custom_openai_api_key:
+#     if selected_option=='zhipuai':
+#         client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
+#     else:
+#         chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
+#     embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key
+#                                  ,
+#                                  model="text-embedding-3-large", dimensions=1536)
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -47,8 +51,6 @@ st.caption("🚀 A streamlit chatbot powered by LLM")
 if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
-if supabase_url and supabase_key:
-    supabase: Client = create_client(supabase_url,supabase_key)
 
 def get_school_name(question):
     nlp = spacy.load("zh_core_web_md")
@@ -66,12 +68,27 @@ def get_school_name(question):
             year = year.replace('年','')
     if not year:
         return "{'school_name':'"+school_name+"'}"
+    elif not school_name:
+        return "{'year':'"+year+"'}"
+    elif not school_name and not year:
+        return None
     else:
         return "{'school_name':'"+school_name+"','year':'"+year+"'}"
 
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
+
+if custom_openai_api_key:
+        if selected_option=='zhipuai':
+            client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
+        else:
+            chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
+        embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key,
+                                    model="text-embedding-3-large", dimensions=1536)
+
+if supabase_url and supabase_key:
+    supabase: Client = create_client(supabase_url,supabase_key)
 
 
 def queryKnowedge(query):
@@ -84,11 +101,18 @@ def queryKnowedge(query):
     #     filter_condition = get_school_name_and_year_by_openai(query)
 
     # 查询知识库
-    result2 = supabase.rpc('match_documents_v3', {
-            "query_embedding": embedding1536.embed_query(query),
-            "filter": ast.literal_eval(filter_condition),
-            "match_count": 4,
-            "match_threshold": 0.1
+    if filter_condition:
+        result2 = supabase.rpc('match_documents_v3', {
+                "query_embedding": embedding1536.embed_query(query),
+                "filter": ast.literal_eval(filter_condition),
+                "match_count": 4,
+                "match_threshold": 0.1
+            }).execute()
+    else:
+        result2 = supabase.rpc('match_documents_v3', {
+        "query_embedding": embedding1536.embed_query(query),
+        "match_count": 4,
+        "match_threshold": 0.1
         }).execute()
     if result2 and len(result2.data) > 0:
         info_source.append(result2.data[0]['metadata']['info_source'])
@@ -122,11 +146,8 @@ def queryKnowedge(query):
     return content
 
 
+def get_result(prompt: str) -> str:
 
-if prompt := st.chat_input():
-    if not custom_openai_api_key or not supabase_url or not supabase_key:
-        st.info("Please add your OpenAI API key and supabase_url and supabase_key to continue.")
-        st.stop()
     content = queryKnowedge(prompt)
 
     if selected_option == 'zhipuai':
@@ -144,21 +165,52 @@ if prompt := st.chat_input():
 
             ),
         ]
+    if selected_option == 'zhipuai':
+        response = client.chat.completions.create(
+            model=model_selected_option,  
+            messages=message_list,
+        )
+        msg = response.choices[0].message.content
+    else:
+        msg = chat(message_list).content
+
+    return msg
+
+
+if prompt := st.chat_input():
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
+    if not custom_openai_api_key or not supabase_url or not supabase_key:
+        st.info("Please add your OpenAI API key and supabase_url and supabase_key to continue.")
+        st.stop()
 
-    with get_openai_callback() as cb:
-        if selected_option == 'zhipuai':
-            response = client.chat.completions.create(
-                model=model_selected_option,  
-                messages=message_list,
-            )
-            msg = response.choices[0].message.content
-        else:
-            msg = chat(message_list).content
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-        st.chat_message("assistant").write(msg)
-        print(cb)
+    
+
+    if st.session_state.messages[-1]["role"] != "assistant":
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                msg = get_result(prompt)
+                placeholder = st.empty()
+                # full_response = ''
+                # for item in response:
+                #     full_response += item
+                #     placeholder.markdown(full_response)
+                placeholder.markdown(msg)
+    message = {"role": "assistant", "content": msg}
+    st.session_state.messages.append(message)
+
+    # with get_openai_callback() as cb:
+    #     if selected_option == 'zhipuai':
+    #         response = client.chat.completions.create(
+    #             model=model_selected_option,  
+    #             messages=message_list,
+    #         )
+    #         msg = response.choices[0].message.content
+    #     else:
+    #         msg = chat(message_list).content
+    #     st.session_state.messages.append({"role": "assistant", "content": msg})
+    #     st.chat_message("assistant").write(msg)
+    #     print(cb)
 
 
 
