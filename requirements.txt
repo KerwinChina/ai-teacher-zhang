@@ -12,3 +12,4 @@ spacy
 zh_core_web_md@https://github.com/explosion/spacy-models/releases/download/zh_core_web_md-3.7.0/zh_core_web_md-3.7.0.tar.gz
 psycopg
 psycopg-binary
+transformers

@@ -22,6 +22,8 @@ from langchain.memory import ConversationSummaryBufferMemory
 from langchain.memory import PostgresChatMessageHistory
 from langchain.chains import ConversationChain
 
+from ChatZhipuAI import ChatZhipuAI
+
 
 
 with st.sidebar:
@@ -105,8 +107,9 @@ for msg in st.session_state.messages:
 
 if custom_openai_api_key:
         if selected_option=='zhipuai':
-            client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
-            chat = client.chat
+            chat = ChatZhipuAI(api_key=custom_openai_api_key,model_name=model_selected_option)
+            # client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
+            # chat = client.chat
         else:
             chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
         embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key,
@@ -253,11 +256,13 @@ def get_result(prompt: str) -> str:
             ),
         ]
     if selected_option == 'zhipuai':
-        response = client.chat.completions.create(
-            model=model_selected_option,  
-            messages=message_list,
-        )
-        msg = response.choices[0].message.content
+        # response = client.chat.completions.create(
+        #     model=model_selected_option,  
+        #     messages=message_list,
+        # )
+        # msg = response.choices[0].message.content
+
+        msg = chat(messages=message_list).content
     else:
         msg = chat(message_list).content
 
