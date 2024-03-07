@@ -1,5 +1,5 @@
 import ast
-from uuid import uuid4
+import uuid
 import spacy
 from openai import OpenAI
 import streamlit as st
@@ -41,11 +41,12 @@ with st.sidebar:
     open_ai_key = st.secrets["open_ai_key"]
     connection_string = st.secrets["connection_string"]
     
-
 # 获取session_id
 if 'session_id' not in st.session_state:
-    st.session_state['session_id'] = uuid4
+    st.session_state['session_id'] = str(uuid.uuid4())
 session_id = st.session_state['session_id']
+# session_id = 'session_id_14'
+
 
 
 # if custom_openai_api_key:
@@ -79,7 +80,6 @@ def get_school_name(question):
     school_name_list = []
     year_list = []
     filter_dict_list = []
-    year = None
     for ent in doc.ents:
         if ent.label_ == "ORG":
            school_name_list.append(ent.text)
@@ -92,12 +92,16 @@ def get_school_name(question):
             if len(year_list)>0:
                 for year in year_list:
                     filter_dict_list.append({"school_name":school_name,"year":year})
+            else:
+                filter_dict_list.append({"school_name":school_name})                
         return filter_dict_list
     elif len(year_list)>0:
         for year in year_list:
             if len(school_name_list)>0:
                 for school_name in school_name_list:
                     filter_dict_list.append({"school_name":school_name,"year":year})
+            else:
+                filter_dict_list.append({"year":year})
         return filter_dict_list
     else:
         return [{}]
@@ -132,7 +136,7 @@ def queryKnowedge(query):
 
 
     system_msg_template = SystemMessagePromptTemplate.from_template(
-        template="""根据input和history中的Human message，制定一个最相关的问题。不是让你回答问题，是让你生成一个问题，只返回问题本身，不要返回其它内容""")
+        template="""根据input和history中的Human内容，生成一个最相关的问题。不要回答问题，不要反问问题，生成的问题中不要出现我，你，您这样的人称代词，是生成一个问题，只返回问题本身，不要返回其它内容""")
 
     human_msg_template = HumanMessagePromptTemplate.from_template(template="{input}")
 
@@ -155,6 +159,7 @@ def queryKnowedge(query):
     request_content = []
     info_source = []
     filter_condition = get_school_name(query)
+    print("filter_condition=",filter_condition,query)
     # if selected_option == 'zhipuai':
     #     filter_condition = get_school_name_and_year_by_zhipu(query)
     # else:
@@ -209,27 +214,35 @@ def queryKnowedge(query):
 def get_result_chain(prompt:str):
     content = queryKnowedge(prompt)
 
-    system_msg_template = SystemMessagePromptTemplate.from_template(template="""我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。""")
-
-
-    human_msg_template = HumanMessagePromptTemplate.from_template(template="{input}")
-
-    prompt_template = ChatPromptTemplate.from_messages([system_msg_template, MessagesPlaceholder(variable_name="history"), human_msg_template])
 
     history = PostgresChatMessageHistory(
-        connection_string="postgres://postgres.dusjejrppguxkatsyzkp:Jy*#357692577@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres",
-        session_id="session_id",
+        connection_string=connection_string,
+        session_id=session_id,
         # table_name='history_messages'
     )
 
-    conversation_with_memory = ConversationChain(
-        llm=chat,
-        prompt=prompt_template,
-        memory=ConversationSummaryBufferMemory(llm=chat, max_token_limit=2000, chat_memory=history),
-        verbose=True
-    )
+    # conversation_with_memory = ConversationChain(
+    #     llm=chat,
+    #     prompt=prompt_template,
+    #     memory=ConversationSummaryBufferMemory(llm=chat, max_token_limit=2000, chat_memory=history),
+    #     verbose=True
+    # )
+    messages = [
+        SystemMessage(
+            content="我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"
+        ),
+        HumanMessage(
+            content=content
 
-    response = conversation_with_memory.predict(input=content)
+        ),
+    ]
+
+    print("content内容=",content)
+
+    response = chat(messages=messages).content
+    # response = chat(messages).content
+    history.add_ai_message(response)
+
     return response
 
     # conversation = ConversationChain(memory=st.session_state.buffer_memory, prompt=prompt_template, llm=llm, verbose=True)
