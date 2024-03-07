@@ -136,7 +136,7 @@ def queryKnowedge(query):
 
 
     system_msg_template = SystemMessagePromptTemplate.from_template(
-        template="""根据input和history中的Human内容，生成一个最相关的问题。不要回答问题，不要反问问题，生成的问题中不要出现我，你，您这样的人称代词，是生成一个问题，只返回问题本身，不要返回其它内容""")
+        template="""根据input和history中的Human内容，生成一个最相关的问题,并且满足以下几个条件。1：不要回答问题。2：不要反问问题。3：是生成一个问题，生成的问题中不要出现我，你，您这样的人称代词。4：只返回问题本身，不要返回其它内容""")
 
     human_msg_template = HumanMessagePromptTemplate.from_template(template="{input}")
 
