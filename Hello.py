@@ -1,4 +1,5 @@
 import ast
+from uuid import uuid4
 import spacy
 from openai import OpenAI
 import streamlit as st
@@ -10,6 +11,16 @@ from langchain.schema import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import get_openai_callback
 from zhipuai import ZhipuAI
+from langchain.prompts import (
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+    ChatPromptTemplate,
+    MessagesPlaceholder
+)
+
+from langchain.memory import ConversationSummaryBufferMemory
+from langchain.memory import PostgresChatMessageHistory
+from langchain.chains import ConversationChain
 
 
 
@@ -26,9 +37,13 @@ with st.sidebar:
     supabase_url = st.secrets["supabase_url"]
     supabase_key = st.secrets["supabase_key"]
     open_ai_key = st.secrets["open_ai_key"]
-    # supabase_url = 'https://dusjejrppguxkatsyzkp.supabase.co'
-    # supabase_key= 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1c2planJwcGd1eGthdHN5emtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDQzNTg1NTYsImV4cCI6MjAxOTkzNDU1Nn0.4ymDATwpY7ousL_rT9SrpHqMT631fo5XYzeu8wsb28s'
-    # open_ai_key = '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'
+    connection_string = st.secrets["connection_string"]
+    
+
+# 获取session_id
+session_id = st.session_state['session_id']
+if not session_id:
+    st.session_state['session_id'] = uuid4
 
 # if custom_openai_api_key:
 #     if selected_option=='zhipuai':
@@ -58,23 +73,31 @@ def get_school_name(question):
     doc = nlp(question)
 
     # Extract organization entities
-    school_name = ''
+    school_name_list = []
+    year_list = []
+    filter_dict_list = []
     year = None
     for ent in doc.ents:
         if ent.label_ == "ORG":
-           school_name = ent.text
+           school_name_list.append(ent.text)
         if ent.label_ == "DATE":
             year = ent.text
             year = year.replace('年','')
-    if not year:
-        return "{'school_name':'"+school_name+"'}"
-    elif not school_name:
-        return "{'year':'"+year+"'}"
-    elif not school_name and not year:
-        return None
+            year_list.append(year)
+    if len(school_name_list)>0:
+        for school_name in school_name_list:
+            if len(year_list)>0:
+                for year in year_list:
+                    filter_dict_list.append({"school_name":school_name,"year":year})
+        return filter_dict_list
+    elif len(year_list)>0:
+        for year in year_list:
+            if len(school_name_list)>0:
+                for school_name in school_name_list:
+                    filter_dict_list.append({"school_name":school_name,"year":year})
+        return filter_dict_list
     else:
-        return "{'school_name':'"+school_name+"','year':'"+year+"'}"
-
+        return [{}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
@@ -92,6 +115,38 @@ if supabase_url and supabase_key:
 
 
 def queryKnowedge(query):
+
+
+
+    history = PostgresChatMessageHistory(
+        connection_string=connection_string,
+        session_id=session_id,
+        # table_name='history_messages'
+    )
+
+
+
+    system_msg_template = SystemMessagePromptTemplate.from_template(
+        template="""根据input和history中的Human message，制定一个最相关的问题。不是让你回答问题，是让你生成一个问题，只返回问题本身，不要返回其它内容""")
+
+    human_msg_template = HumanMessagePromptTemplate.from_template(template="{input}")
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [system_msg_template,
+         MessagesPlaceholder(variable_name="history"),
+         human_msg_template])
+
+    conversation_with_memory = ConversationChain(
+        llm=chat,
+        prompt=prompt_template,
+        memory=ConversationSummaryBufferMemory(llm=chat, max_token_limit=2000,
+                                               chat_memory=history, return_messages=True),
+        verbose=True
+    )
+
+    response = conversation_with_memory.predict(input=query)
+    print('制定的相关问题',response,query)
+    query = response
     request_content = []
     info_source = []
     filter_condition = get_school_name(query)
@@ -104,13 +159,14 @@ def queryKnowedge(query):
     if filter_condition:
         result2 = supabase.rpc('match_documents_v3', {
                 "query_embedding": embedding1536.embed_query(query),
-                "filter": ast.literal_eval(filter_condition),
+                "filter": filter_condition,
                 "match_count": 4,
                 "match_threshold": 0.1
             }).execute()
     else:
         result2 = supabase.rpc('match_documents_v3', {
         "query_embedding": embedding1536.embed_query(query),
+        "filter":[{}],
         "match_count": 4,
         "match_threshold": 0.1
         }).execute()
@@ -144,6 +200,35 @@ def queryKnowedge(query):
     content = f"'''{similar_text}'''"
     content += f'\n问题：{query}'
     return content
+
+def get_result_chain(prompt:str):
+    content = queryKnowedge(prompt)
+
+    system_msg_template = SystemMessagePromptTemplate.from_template(template="""我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。""")
+
+
+    human_msg_template = HumanMessagePromptTemplate.from_template(template="{input}")
+
+    prompt_template = ChatPromptTemplate.from_messages([system_msg_template, MessagesPlaceholder(variable_name="history"), human_msg_template])
+
+    history = PostgresChatMessageHistory(
+        connection_string="postgres://postgres.dusjejrppguxkatsyzkp:Jy*#357692577@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres",
+        session_id="session_id",
+        # table_name='history_messages'
+    )
+
+    conversation_with_memory = ConversationChain(
+        llm=chat,
+        prompt=prompt_template,
+        memory=ConversationSummaryBufferMemory(llm=chat, max_token_limit=2000, chat_memory=history),
+        verbose=True
+    )
+
+    response = conversation_with_memory.predict(input=content)
+    return response
+
+    # conversation = ConversationChain(memory=st.session_state.buffer_memory, prompt=prompt_template, llm=llm, verbose=True)
+
 
 
 def get_result(prompt: str) -> str:
@@ -189,7 +274,7 @@ if prompt := st.chat_input():
     if st.session_state.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                msg = get_result(prompt)
+                msg = get_result_chain(prompt)
                 placeholder = st.empty()
                 # full_response = ''
                 # for item in response:
