@@ -154,12 +154,10 @@ def queryKnowedge(query):
     )
 
     response = conversation_with_memory.predict(input=query)
-    print('制定的相关问题',response,query)
     query = response
     request_content = []
     info_source = []
     filter_condition = get_school_name(query)
-    print("filter_condition=",filter_condition,query)
     # if selected_option == 'zhipuai':
     #     filter_condition = get_school_name_and_year_by_zhipu(query)
     # else:
@@ -237,7 +235,6 @@ def get_result_chain(prompt:str):
         ),
     ]
 
-    print("content内容=",content)
 
     response = chat(messages=messages).content
     # response = chat(messages).content
