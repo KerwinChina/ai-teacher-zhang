@@ -106,6 +106,7 @@ for msg in st.session_state.messages:
 if custom_openai_api_key:
         if selected_option=='zhipuai':
             client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
+            chat = client.chat
         else:
             chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
         embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key,
