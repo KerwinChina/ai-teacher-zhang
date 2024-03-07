@@ -41,9 +41,10 @@ with st.sidebar:
     
 
 # 获取session_id
-session_id = st.session_state['session_id']
-if not session_id:
+if 'session_id' not in st.session_state:
     st.session_state['session_id'] = uuid4
+session_id = st.session_state['session_id']
+
 
 # if custom_openai_api_key:
 #     if selected_option=='zhipuai':
