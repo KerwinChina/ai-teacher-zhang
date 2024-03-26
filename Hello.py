@@ -10,7 +10,6 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_community.callbacks import get_openai_callback
-from zhipuai import ZhipuAI
 from langchain.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
@@ -78,7 +77,6 @@ for msg in st.session_state.messages:
 if custom_openai_api_key:
         if selected_option=='zhipuai':
             chat = ChatZhipuAI(api_key=custom_openai_api_key,model_name=model_selected_option)
-
             # client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
             # chat = client.chat
 
@@ -136,21 +134,21 @@ def get_result(prompt: str) -> str:
 
     content = query_knowledge(prompt)
 
-    if selected_option == 'zhipuai':
-        message_list = [
-            {"role": "system", "content": "我会将文档内容以三引号(''')引起来发送给你。"},
-            {"role": "user", "content": content},
-        ]
-    else:
-        message_list = [
-            SystemMessage(
-                content="我会将文档内容以三引号(''')引起来发送给你。"
-            ),
-            HumanMessage(
-                content=content
+    # if selected_option == 'zhipuai':
+    #     message_list = [
+    #         {"role": "system", "content": "我会将文档内容以三引号(''')引起来发送给你。"},
+    #         {"role": "user", "content": content},
+    #     ]
+    # else:
+    message_list = [
+        SystemMessage(
+            content="我会将文档内容以三引号(''')引起来发送给你。"
+        ),
+        HumanMessage(
+            content=content
 
-            ),
-        ]
+        ),
+    ]
     if selected_option == 'zhipuai':
         # response = client.chat.completions.create(
         #     model=model_selected_option,  
