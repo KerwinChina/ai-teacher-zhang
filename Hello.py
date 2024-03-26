@@ -114,77 +114,33 @@ if custom_openai_api_key:
             chat = ChatZhipuAI(api_key=custom_openai_api_key,model_name=model_selected_option)
             # client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
             # chat = client.chat
+
         else:
             chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
-        embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key,
-                                    model="text-embedding-3-large", dimensions=1536)
+        embedding1024 = OpenAIEmbeddings(openai_api_key=open_ai_key,
+                                    model="text-embedding-3-large", dimensions=1024)
 
 if supabase_url and supabase_key:
     supabase: Client = create_client(supabase_url,supabase_key)
 
 
-def queryKnowedge(query):
 
 
 
-    history = PostgresChatMessageHistory(
-        connection_string=connection_string,
-        session_id=session_id,
-        # table_name='history_messages'
-    )
-
-
-
-    system_msg_template = SystemMessagePromptTemplate.from_template(
-        template="""根据input和history中的Human内容，生成一个最相关的问题,并且满足以下几个条件。1：不要回答问题。2：不要反问问题。3：是生成一个问题，生成的问题中不要出现我，你，您这样的人称代词。4：只返回问题本身，不要返回其它内容""")
-
-    human_msg_template = HumanMessagePromptTemplate.from_template(template="{input}")
-
-    prompt_template = ChatPromptTemplate.from_messages(
-        [system_msg_template,
-         MessagesPlaceholder(variable_name="history"),
-         human_msg_template])
-
-    conversation_with_memory = ConversationChain(
-        llm=chat,
-        prompt=prompt_template,
-        memory=ConversationSummaryBufferMemory(llm=chat, max_token_limit=2000,
-                                               chat_memory=history, return_messages=True),
-        verbose=True
-    )
-
-    response = conversation_with_memory.predict(input=query)
-    query = response
+def query_knowledge(query: str) -> str :
     request_content = []
-    info_source = []
-    filter_condition = get_school_name(query)
-    # if selected_option == 'zhipuai':
-    #     filter_condition = get_school_name_and_year_by_zhipu(query)
-    # else:
-    #     filter_condition = get_school_name_and_year_by_openai(query)
-
-    # 查询知识库
-    if filter_condition:
-        result2 = supabase.rpc('match_documents_v3', {
-                "query_embedding": embedding1536.embed_query(query),
-                "filter": filter_condition,
-                "match_count": 4,
-                "match_threshold": 0.1
-            }).execute()
-    else:
-        result2 = supabase.rpc('match_documents_v3', {
-        "query_embedding": embedding1536.embed_query(query),
-        "filter":[{}],
-        "match_count": 4,
+    # rpc的方式
+    vector = embedding1024.embed_query(query)
+    result2 = supabase.rpc('match_yeeha_documents_v3', {
+        "query_embedding": vector,
+        "match_count": 10,
         "match_threshold": 0.1
-        }).execute()
-    if result2 and len(result2.data) > 0:
-        info_source.append(result2.data[0]['metadata']['info_source'])
+    }).execute()
+
 
     for item in result2.data:
-        request_content.append(item['metadata']['school_name']+"; "+item['content'])
+        request_content.append(item['content'])
 
-    # request_content = list(set(request_content))
 
     print('截取before的相似性内容=', request_content)
 
@@ -199,7 +155,7 @@ def queryKnowedge(query):
     if len(texts) == 1:
         similar_text = texts[0]
     elif len(texts) > 1:
-        similar_text = texts[0]+texts[1]
+        similar_text = texts[0] + texts[1]
 
     token_num = num_tokens_from_string(similar_text, "cl100k_base")
     print('截取after的相似性内容=', similar_text)
@@ -209,56 +165,19 @@ def queryKnowedge(query):
     content += f'\n问题：{query}'
     return content
 
-def get_result_chain(prompt:str):
-    content = queryKnowedge(prompt)
-
-
-    history = PostgresChatMessageHistory(
-        connection_string=connection_string,
-        session_id=session_id,
-        # table_name='history_messages'
-    )
-
-    # conversation_with_memory = ConversationChain(
-    #     llm=chat,
-    #     prompt=prompt_template,
-    #     memory=ConversationSummaryBufferMemory(llm=chat, max_token_limit=2000, chat_memory=history),
-    #     verbose=True
-    # )
-    messages = [
-        SystemMessage(
-            content="我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"
-        ),
-        HumanMessage(
-            content=content
-
-        ),
-    ]
-
-
-    response = chat(messages=messages).content
-    # response = chat(messages).content
-    history.add_ai_message(response)
-
-    return response
-
-    # conversation = ConversationChain(memory=st.session_state.buffer_memory, prompt=prompt_template, llm=llm, verbose=True)
-
-
-
 def get_result(prompt: str) -> str:
 
-    content = queryKnowedge(prompt)
+    content = query_knowledge(prompt)
 
     if selected_option == 'zhipuai':
         message_list = [
-            {"role": "system", "content": "我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"},
+            {"role": "system", "content": "我会将文档内容以三引号(''')引起来发送给你。"},
             {"role": "user", "content": content},
         ]
     else:
         message_list = [
             SystemMessage(
-                content="我会将文档内容以三引号(''')引起来发送给你。请使用中文回答问题。"
+                content="我会将文档内容以三引号(''')引起来发送给你。"
             ),
             HumanMessage(
                 content=content
@@ -291,7 +210,7 @@ if prompt := st.chat_input():
     if st.session_state.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                msg = get_result_chain(prompt)
+                msg = get_result(prompt)
                 placeholder = st.empty()
                 # full_response = ''
                 # for item in response:
