@@ -65,46 +65,12 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     return num_tokens
 
 
-st.title("💬 AI版张老师")
-st.caption("🚀 A streamlit chatbot powered by LLM")
+st.title("💬 knowledge_base")
+st.caption("🚀 A streamlit knowledge_base powered by LLM")
 if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
 
-def get_school_name(question):
-    nlp = spacy.load("zh_core_web_md")
-    # Process the sentence with spaCy
-    doc = nlp(question)
-
-    # Extract organization entities
-    school_name_list = []
-    year_list = []
-    filter_dict_list = []
-    for ent in doc.ents:
-        if ent.label_ == "ORG":
-           school_name_list.append(ent.text)
-        if ent.label_ == "DATE":
-            year = ent.text
-            year = year.replace('年','')
-            year_list.append(year)
-    if len(school_name_list)>0:
-        for school_name in school_name_list:
-            if len(year_list)>0:
-                for year in year_list:
-                    filter_dict_list.append({"school_name":school_name,"year":year})
-            else:
-                filter_dict_list.append({"school_name":school_name})                
-        return filter_dict_list
-    elif len(year_list)>0:
-        for year in year_list:
-            if len(school_name_list)>0:
-                for school_name in school_name_list:
-                    filter_dict_list.append({"school_name":school_name,"year":year})
-            else:
-                filter_dict_list.append({"year":year})
-        return filter_dict_list
-    else:
-        return [{}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
@@ -112,6 +78,7 @@ for msg in st.session_state.messages:
 if custom_openai_api_key:
         if selected_option=='zhipuai':
             chat = ChatZhipuAI(api_key=custom_openai_api_key,model_name=model_selected_option)
+
             # client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
             # chat = client.chat
 
