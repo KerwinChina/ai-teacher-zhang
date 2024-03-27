@@ -11,3 +11,4 @@ zhipuai
 psycopg
 psycopg-binary
 transformers
+langchain_anthropic
