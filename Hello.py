@@ -22,7 +22,7 @@ from ChatZhipuAI import ChatZhipuAI
 
 
 with st.sidebar:
-    selected_option = st.selectbox('请选择一个公司', ['zhipuai', 'openai'])
+    selected_option = st.selectbox('请选择一个公司', ['zhipuai', 'claude', 'openai'])
     if selected_option == 'zhipuai':
         model_selected_option = st.selectbox('请选择一个模型', ['glm-4', 'glm-3-turbo'])
         custom_openai_api_key = st.secrets["zhipu_ai_key"]
