@@ -1,25 +1,21 @@
-import ast
+
 import uuid
-import spacy
-from openai import OpenAI
 import streamlit as st
 from supabase import create_client, Client
 import tiktoken
 from langchain.text_splitter import TokenTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain.schema import HumanMessage, SystemMessage
+
 from langchain_openai import ChatOpenAI
-from langchain_community.callbacks import get_openai_callback
+from langchain_anthropic import ChatAnthropic
+
 from langchain.prompts import (
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
+
     ChatPromptTemplate,
-    MessagesPlaceholder
+
 )
 
-from langchain.memory import ConversationSummaryBufferMemory
-from langchain.memory import PostgresChatMessageHistory
-from langchain.chains import ConversationChain
+
 
 from ChatZhipuAI import ChatZhipuAI
 
@@ -30,11 +26,14 @@ with st.sidebar:
     if selected_option == 'zhipuai':
         model_selected_option = st.selectbox('请选择一个模型', ['glm-4', 'glm-3-turbo'])
         custom_openai_api_key = st.secrets["zhipu_ai_key"]
+    elif selected_option == 'claude':
+        model_selected_option = st.selectbox('请选择一个模型', ['claude-3-haiku-20240307', 'claude-3-sonnet-20240229',
+                                                                'claude-3-opus-20240229'])
+        custom_openai_api_key = st.text_input("API Key", key="chatbot_api_key", type="password")
     else:
         model_selected_option = st.selectbox('请选择一个模型', ['gpt-4-0125-preview', 'gpt-3.5-turbo-0125'])
         custom_openai_api_key = st.text_input("API Key", key="chatbot_api_key", type="password")
-    # supabase_url = st.text_input("supabase URL", key="supabase URL", type="password")
-    # supabase_key = st.text_input("supabase KEY", key="supabase KEY", type="password")
+
     supabase_url = st.secrets["supabase_url"]
     supabase_key = st.secrets["supabase_key"]
     open_ai_key = st.secrets["open_ai_key"]
@@ -44,18 +43,7 @@ with st.sidebar:
 if 'session_id' not in st.session_state:
     st.session_state['session_id'] = str(uuid.uuid4())
 session_id = st.session_state['session_id']
-# session_id = 'session_id_14'
 
-
-
-# if custom_openai_api_key:
-#     if selected_option=='zhipuai':
-#         client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
-#     else:
-#         chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
-#     embedding1536 = OpenAIEmbeddings(openai_api_key=open_ai_key
-#                                  ,
-#                                  model="text-embedding-3-large", dimensions=1536)
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -77,9 +65,10 @@ for msg in st.session_state.messages:
 if custom_openai_api_key:
         if selected_option=='zhipuai':
             chat = ChatZhipuAI(api_key=custom_openai_api_key,model_name=model_selected_option)
-            # client = ZhipuAI(api_key=custom_openai_api_key)  # 填写您自己的APIKey
-            # chat = client.chat
-
+        elif selected_option == 'claude':
+            chat = ChatAnthropic(
+                anthropic_api_key=custom_openai_api_key,
+                model_name=model_selected_option)
         else:
             chat = ChatOpenAI(openai_api_key=custom_openai_api_key, model_name=model_selected_option)
         embedding1024 = OpenAIEmbeddings(openai_api_key=open_ai_key,
@@ -130,38 +119,24 @@ def query_knowledge(query: str) -> str :
     content += f'\n问题：{query}'
     return content
 
-def get_result(prompt: str) -> str:
 
+
+
+def get_streaming_result(prompt: str) -> str:
     content = query_knowledge(prompt)
 
-    # if selected_option == 'zhipuai':
-    #     message_list = [
-    #         {"role": "system", "content": "我会将文档内容以三引号(''')引起来发送给你。"},
-    #         {"role": "user", "content": content},
-    #     ]
-    # else:
-    message_list = [
-        SystemMessage(
-            content="我会将文档内容以三引号(''')引起来发送给你。"
-        ),
-        HumanMessage(
-            content=content
+    system = "{system_message}"
+    human = "{text}"
+    prompt = ChatPromptTemplate.from_messages(
 
-        ),
-    ]
-    if selected_option == 'zhipuai':
-        # response = client.chat.completions.create(
-        #     model=model_selected_option,  
-        #     messages=message_list,
-        # )
-        # msg = response.choices[0].message.content
-
-        msg = chat(messages=message_list).content
-    else:
-        msg = chat(message_list).content
-
+        [("system", system), ("human", human)]
+    )
+    chain = prompt | chat
+    msg = st.write_stream(chain.stream({
+        "system_message": "我会将文档内容以三引号(''')引起来发送给你。",
+        "text": content
+    }))
     return msg
-
 
 if prompt := st.chat_input():
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -175,40 +150,6 @@ if prompt := st.chat_input():
     if st.session_state.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                msg = get_result(prompt)
-                placeholder = st.empty()
-                # full_response = ''
-                # for item in response:
-                #     full_response += item
-                #     placeholder.markdown(full_response)
-                placeholder.markdown(msg)
-    message = {"role": "assistant", "content": msg}
+                stream = get_streaming_result(prompt)
+    message = {"role": "assistant", "content": stream}
     st.session_state.messages.append(message)
-
-    # with get_openai_callback() as cb:
-    #     if selected_option == 'zhipuai':
-    #         response = client.chat.completions.create(
-    #             model=model_selected_option,  
-    #             messages=message_list,
-    #         )
-    #         msg = response.choices[0].message.content
-    #     else:
-    #         msg = chat(message_list).content
-    #     st.session_state.messages.append({"role": "assistant", "content": msg})
-    #     st.chat_message("assistant").write(msg)
-    #     print(cb)
-
-
-
-
-
-
-
-
-    # client = OpenAI(api_key=openai_api_key)
-    # st.session_state.messages.append({"role": "user", "content": prompt})
-    # st.chat_message("user").write(query_content)
-    # response = client.chat.completions.create(model="gpt-4-0125-preview", messages=st.session_state.messages)
-    # msg = response.choices[0].message.content
-    # st.session_state.messages.append({"role": "assistant", "content": msg})
-    # st.chat_message("assistant").write(msg)

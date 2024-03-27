@@ -8,7 +8,6 @@ langchain
 tiktoken
 langchain_openai
 zhipuai
-spacy
 psycopg
 psycopg-binary
 transformers
